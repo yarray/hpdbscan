@@ -13,7 +13,7 @@ SET(CMAKE_CXX_FLAGS "-Ofast -Wall -Wextra")
 SET(CMAKE_CXX_FLAGS_DEBUG "-g")
 
 # add the include and source directories
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include /usr/local/include/)
 
 # set up the build targets
 ## set up the shared library compilation
