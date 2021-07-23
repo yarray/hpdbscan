@@ -37,10 +37,15 @@
 #include "mpi_util.h"
 #endif
 
+struct EPSConfig {
+    std::vector<size_t> dimensions;
+    float eps2 = 0.0;
+};
+
 template <typename T>
 class SpatialIndex {
     Dataset&                   m_data;
-    const float                m_epsilon;
+    std::vector<float>         m_epsilon_map;
 
     std::vector<T>             m_minimums;
     std::vector<T>             m_maximums;
@@ -123,7 +128,7 @@ private:
 
     void compute_cell_dimensions() {
         for (size_t i = 0; i < m_cell_dimensions.size(); ++i) {
-            size_t cells = static_cast<size_t>(std::ceil((m_maximums[i] - m_minimums[i]) / m_epsilon)) + 1;
+            size_t cells = static_cast<size_t>(std::ceil((m_maximums[i] - m_minimums[i]) / m_epsilon_map[i])) + 1;
             m_cell_dimensions[i] = cells;
             m_total_cells *= cells;
         }
@@ -153,7 +158,7 @@ private:
             size_t accumulator = 1;
 
             for (size_t d : m_swapped_dimensions) {
-                size_t index = static_cast<size_t>(std::floor((point[d] - m_minimums[d]) / m_epsilon));
+                size_t index = static_cast<size_t>(std::floor((point[d] - m_minimums[d]) / m_epsilon_map[d]));
                 cell += index * accumulator;
                 accumulator *= m_cell_dimensions[d];
             }
@@ -526,9 +531,10 @@ private:
     #endif
 
 public:
-    SpatialIndex(Dataset& data, const float epsilon)
+    // SpatialIndex(Dataset& data, std::vector<float> epsilon_map)
+    SpatialIndex(Dataset& data, float epsilon)
       : m_data(data),
-        m_epsilon(epsilon),
+        m_epsilon_map(std::vector<float>(data.m_chunk[1], epsilon)),
         m_minimums(data.m_chunk[1], std::numeric_limits<T>::max()),
         m_maximums(data.m_chunk[1], std::numeric_limits<T>::min()),
         m_cell_dimensions(data.m_chunk[1], 0),
@@ -750,11 +756,58 @@ public:
 
             // determine euclidean distance to other point
             for (size_t d = 0; d < dimensions; ++d) {
-		const size_t distance = point[d] - other_point[d];
+		        const size_t distance = point[d] - other_point[d];
                 offset += distance * distance;
             }
             // .. if in range, add it to the vector with in range points
             if (offset <= EPS2) {
+                const Cluster neighbor_label = clusters[neighbor];
+
+                min_points_area.push_back(neighbor);
+                // if neighbor point has an assigned label and it is a core, determine what label to take
+                if (neighbor_label != NOT_VISITED and neighbor_label < 0) {
+                    cluster_label = std::min(cluster_label, std::abs(neighbor_label));
+                }
+            }
+        }
+
+        return cluster_label;
+    }
+
+    size_t dimension() const {
+        return m_data.m_chunk[1];
+    }
+
+    Cluster region_query_multi_crit(const size_t point_index, const std::vector<size_t> &neighboring_points, const std::vector<EPSConfig> &all_eps,
+                                    const Clusters &clusters, std::vector<size_t> &min_points_area) const {
+        const size_t dimensions = m_data.m_chunk[1];
+        const T *point = static_cast<T *>(m_data.m_p) + point_index * dimensions;
+        Cluster cluster_label = m_global_point_offset + point_index + 1;
+
+        // iterate through all neighboring points and check whether they are in range
+        for (size_t neighbor : neighboring_points) {
+            double offset = 0.0;
+            const T *other_point = static_cast<T *>(m_data.m_p) + neighbor * dimensions;
+
+            std::vector<float> offsets;
+            for (auto &&eps_conf: all_eps) {
+                // determine euclidean distance to other point
+                for (auto &&d: eps_conf.dimensions) {
+                    const size_t distance = point[d] - other_point[d];
+                    offset += distance * distance;
+                }
+                offsets.push_back(offset);
+            }
+
+            // .. if in range, add it to the vector with in range points
+            bool in_range = true;
+            for (size_t i = 0; i < all_eps.size(); ++i) {
+                if (offsets[i] > all_eps[i].eps2) {
+                    in_range = false;
+                    break;
+                }
+            }
+            if (in_range) {
                 const Cluster neighbor_label = clusters[neighbor];
 
                 min_points_area.push_back(neighbor);

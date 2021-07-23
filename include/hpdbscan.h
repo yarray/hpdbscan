@@ -72,7 +72,17 @@ class HPDBSCAN {
             std::vector<size_t> min_points_area;
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
-                cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area);
+                // TODO: allow multiple epsilon
+                std::vector<EPSConfig> all_eps;
+                EPSConfig eps_conf;
+                for (size_t i = 0; i < index.dimension(); ++i) {
+                    eps_conf.dimensions.push_back(i);
+                }
+
+                eps_conf.eps2 = EPS2;
+                all_eps.push_back(eps_conf);
+                // cluster_label = index.region_query(point, neighboring_points, eps2, clusters, min_points_area);
+                cluster_label = index.region_query_multi_crit(point, neighboring_points, all_eps, clusters, min_points_area);
             }
 
             if (min_points_area.size() >= m_min_points) {
@@ -369,6 +379,8 @@ public:
         #endif
 
         // initialize the feature indexer
+        // TODO: allow multiple epsilon
+        std::vector<float> m_epsilon_map(dataset.m_chunk[1], m_epsilon);
         SpatialIndex<T> index(dataset, m_epsilon);
         // initialize the clusters array
         Clusters clusters(dataset.m_chunk[0], NOT_VISITED);
