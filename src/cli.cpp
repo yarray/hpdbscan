@@ -25,6 +25,18 @@
 #include "cxxopts.h"
 #include "hpdbscan.h"
 
+std::vector<std::string> tokenize(const std::string &str, char delim) {
+    std::vector<std::string> out;
+    size_t start;
+    size_t end = 0;
+
+    while ((start = str.find_first_not_of(delim, end)) != std::string::npos) {
+        end = str.find(delim, start);
+        out.push_back(str.substr(start, end - start));
+    }
+    return out;
+}
+
 int main(int argc, char** argv) {
     #ifdef WITH_MPI
     int error, provided;
@@ -43,7 +55,8 @@ int main(int argc, char** argv) {
     parser.add_options()
         ("h, help", "this help message")
         ("m, minPoints", "density threshold", cxxopts::value<size_t>()->default_value("2"))
-        ("e, epsilon", "spatial search radius", cxxopts::value<float>()->default_value("0.1"))
+        ("e, epsilon", "search radius", cxxopts::value<float>()->default_value("0.1"))
+        ("epsilon-groups", "grouped search radius, as <group>=<dimension>,<dimension>:<epsilon>;<group>;...", cxxopts::value<std::string>()->default_value(""))
         ("t, threads", "utilized threads", cxxopts::value<int>()->default_value(std::to_string(omp_get_max_threads())))
         ("i, input", "input file", cxxopts::value<std::string>()->default_value("data.h5"))
         ("o, output", "output file", cxxopts::value<std::string>()->default_value("data.h5"))
@@ -82,7 +95,17 @@ int main(int argc, char** argv) {
 
     // run the clustering algorithm
     try {
-        HPDBSCAN hpdbscan(arguments["epsilon"].as<float>(), arguments["minPoints"].as<size_t>());
+        std::vector<EPSConfig> eps_overrides;
+        for (auto &&group : tokenize(arguments["epsilon-groups"].as<std::string>(), ';')) {
+            EPSConfig eps_conf;
+            auto pair = tokenize(group, ':');
+            for (auto &&dim : tokenize(pair[0], ',')) {
+                eps_conf.dimensions.push_back(std::stof(dim));
+                eps_conf.epsilon = std::stof(pair[1]);
+            }
+            eps_overrides.push_back(eps_conf);
+        }
+        HPDBSCAN hpdbscan(arguments["epsilon"].as<float>(), arguments["minPoints"].as<size_t>(), eps_overrides);
         clusters = hpdbscan.cluster(
             arguments["input"].as<std::string>(),
             arguments["input-dataset"].as<std::string>(),

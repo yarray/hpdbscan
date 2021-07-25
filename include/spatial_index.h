@@ -39,7 +39,7 @@
 
 struct EPSConfig {
     std::vector<size_t> dimensions;
-    float eps2 = 0.0;
+    float epsilon = 0.0;
 };
 
 template <typename T>
@@ -532,9 +532,9 @@ private:
 
 public:
     // SpatialIndex(Dataset& data, std::vector<float> epsilon_map)
-    SpatialIndex(Dataset& data, float epsilon)
+    SpatialIndex(Dataset& data, std::vector<float> epsilon_map)
       : m_data(data),
-        m_epsilon_map(std::vector<float>(data.m_chunk[1], epsilon)),
+        m_epsilon_map(std::move(epsilon_map)),
         m_minimums(data.m_chunk[1], std::numeric_limits<T>::max()),
         m_maximums(data.m_chunk[1], std::numeric_limits<T>::min()),
         m_cell_dimensions(data.m_chunk[1], 0),
@@ -780,33 +780,42 @@ public:
 
     Cluster region_query_multi_crit(const size_t point_index, const std::vector<size_t> &neighboring_points, const std::vector<EPSConfig> &all_eps,
                                     const Clusters &clusters, std::vector<size_t> &min_points_area) const {
+        std::cerr << "neighbouring_points: " << point_index << "-> ";
+        for (auto &&p : neighboring_points) {
+            std::cerr << p << " ";
+        }
+        std::cerr << std::endl;
         const size_t dimensions = m_data.m_chunk[1];
         const T *point = static_cast<T *>(m_data.m_p) + point_index * dimensions;
         Cluster cluster_label = m_global_point_offset + point_index + 1;
 
         // iterate through all neighboring points and check whether they are in range
         for (size_t neighbor : neighboring_points) {
-            double offset = 0.0;
             const T *other_point = static_cast<T *>(m_data.m_p) + neighbor * dimensions;
 
             std::vector<float> offsets;
+            std::cerr << neighbor << " offset: ";
             for (auto &&eps_conf: all_eps) {
+                double offset = 0.0;
                 // determine euclidean distance to other point
                 for (auto &&d: eps_conf.dimensions) {
                     const size_t distance = point[d] - other_point[d];
                     offset += distance * distance;
                 }
+                std::cerr << offset << " ";
                 offsets.push_back(offset);
             }
 
             // .. if in range, add it to the vector with in range points
             bool in_range = true;
             for (size_t i = 0; i < all_eps.size(); ++i) {
-                if (offsets[i] > all_eps[i].eps2) {
+                if (offsets[i] > all_eps[i].epsilon * all_eps[i].epsilon) {
                     in_range = false;
                     break;
                 }
             }
+
+            std::cerr << ":" << in_range << " ";
             if (in_range) {
                 const Cluster neighbor_label = clusters[neighbor];
 
@@ -816,7 +825,9 @@ public:
                     cluster_label = std::min(cluster_label, std::abs(neighbor_label));
                 }
             }
+            std::cerr << std::endl;
         }
+        std::cerr << std::endl;
 
         return cluster_label;
     }
