@@ -780,11 +780,6 @@ public:
 
     Cluster region_query_multi_crit(const size_t point_index, const std::vector<size_t> &neighboring_points, const std::vector<EPSConfig> &all_eps,
                                     const Clusters &clusters, std::vector<size_t> &min_points_area) const {
-        std::cerr << "neighbouring_points: " << point_index << "-> ";
-        for (auto &&p : neighboring_points) {
-            std::cerr << p << " ";
-        }
-        std::cerr << std::endl;
         const size_t dimensions = m_data.m_chunk[1];
         const T *point = static_cast<T *>(m_data.m_p) + point_index * dimensions;
         Cluster cluster_label = m_global_point_offset + point_index + 1;
@@ -794,7 +789,6 @@ public:
             const T *other_point = static_cast<T *>(m_data.m_p) + neighbor * dimensions;
 
             std::vector<float> offsets;
-            std::cerr << neighbor << " offset: ";
             for (auto &&eps_conf: all_eps) {
                 double offset = 0.0;
                 // determine euclidean distance to other point
@@ -802,7 +796,6 @@ public:
                     const size_t distance = point[d] - other_point[d];
                     offset += distance * distance;
                 }
-                std::cerr << offset << " ";
                 offsets.push_back(offset);
             }
 
@@ -815,7 +808,6 @@ public:
                 }
             }
 
-            std::cerr << ":" << in_range << " ";
             if (in_range) {
                 const Cluster neighbor_label = clusters[neighbor];
 
@@ -825,9 +817,7 @@ public:
                     cluster_label = std::min(cluster_label, std::abs(neighbor_label));
                 }
             }
-            std::cerr << std::endl;
         }
-        std::cerr << std::endl;
 
         return cluster_label;
     }
