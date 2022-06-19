@@ -95,9 +95,9 @@ int main(int argc, char** argv) {
 
     // run the clustering algorithm
     try {
-        std::vector<EPSConfig> eps_overrides;
+        std::vector<EpsilonGroup> eps_overrides;
         for (auto &&group : tokenize(arguments["epsilon-groups"].as<std::string>(), ';')) {
-            EPSConfig eps_conf;
+            EpsilonGroup eps_conf;
             auto pair = tokenize(group, ':');
             for (auto &&dim : tokenize(pair[0], ',')) {
                 eps_conf.dimensions.push_back(std::stof(dim));

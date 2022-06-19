@@ -42,8 +42,7 @@
 class HPDBSCAN {
     float m_epsilon;
     size_t m_min_points;
-    std::vector<EPSConfig> m_epsilon_overrides;
-    std::vector<EPSConfig> m_epsilons_cache;  // cache for each run of cluster
+    std::vector<EpsilonGroup> m_epsilon_overrides;
 
     #ifdef WITH_MPI
     int m_rank;
@@ -51,7 +50,7 @@ class HPDBSCAN {
     #endif
 
     template <typename T>
-    Rules local_dbscan(Clusters& clusters, const SpatialIndex<T>& index) {
+    Rules local_dbscan(Clusters &clusters, const SpatialIndex<T> &index, const std::vector<EpsilonGroup> &epsilon_groups) {
         const size_t lower = index.lower_halo_bound();
         const size_t upper = index.upper_halo_bound();
 
@@ -74,7 +73,7 @@ class HPDBSCAN {
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
                 // cluster_label = index.region_query(point, neighboring_points, eps2, clusters, min_points_area);
-                cluster_label = index.region_query_multi_crit(point, neighboring_points, m_epsilons_cache, clusters, min_points_area);
+                cluster_label = index.region_query_multi_crit(point, neighboring_points, epsilon_groups, clusters, min_points_area);
             }
 
             if (min_points_area.size() >= m_min_points) {
@@ -287,7 +286,7 @@ class HPDBSCAN {
     #endif
 
 public:
-    HPDBSCAN(float epsilon, size_t min_points, std::vector<EPSConfig> epsilon_overrides = std::vector<EPSConfig>())
+    HPDBSCAN(float epsilon, size_t min_points, std::vector<EpsilonGroup> epsilon_overrides = std::vector<EpsilonGroup>())
         : m_epsilon(epsilon), m_min_points(min_points), m_epsilon_overrides(std::move(epsilon_overrides)) {
         #ifdef WITH_MPI
         MPI_Comm_rank(MPI_COMM_WORLD, &m_rank);
@@ -377,26 +376,26 @@ public:
         #endif
 
         // initialize the feature indexer
-        m_epsilons_cache.clear();
+        std::vector<EpsilonGroup> epsilon_groups;
         // whether dimension appears in overrides
         std::vector<bool> visited(dataset.m_chunk[1], false);
         for (auto &&cfg : m_epsilon_overrides) {
-            m_epsilons_cache.push_back(cfg);
+            epsilon_groups.push_back(cfg);
             for (auto &&d : cfg.dimensions) {
                 visited[d] = true;
             }
         }
         // create a group for dimensions not appearing in overrides
-        EPSConfig residue;
+        EpsilonGroup residue;
         for (size_t i = 0; i < visited.size(); i++) {
             if (!visited[i]) {
                 residue.dimensions.push_back(i);
             }
         }
         residue.epsilon = m_epsilon;
-        m_epsilons_cache.push_back(residue);
+        epsilon_groups.push_back(residue);
         std::vector<float> epsilon_map(dataset.m_chunk[1], m_epsilon);
-        for (auto &&cfg : m_epsilons_cache) {
+        for (auto &&cfg : epsilon_groups) {
             for (auto &&dim : cfg.dimensions) {
                 epsilon_map[dim] = cfg.epsilon;
             }
@@ -419,7 +418,7 @@ public:
             #endif
             start = omp_get_wtime();
         #endif
-        Rules rules = local_dbscan(clusters, index);
+        Rules rules = local_dbscan(clusters, index, epsilon_groups);
         #ifdef WITH_OUTPUT
             #ifdef WITH_MPI
             if (m_rank == 0) {

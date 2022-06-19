@@ -37,7 +37,7 @@
 #include "mpi_util.h"
 #endif
 
-struct EPSConfig {
+struct EpsilonGroup {
     std::vector<size_t> dimensions;
     float epsilon = 0.0;
 };
@@ -778,7 +778,7 @@ public:
         return m_data.m_chunk[1];
     }
 
-    Cluster region_query_multi_crit(const size_t point_index, const std::vector<size_t> &neighboring_points, const std::vector<EPSConfig> &all_eps,
+    Cluster region_query_multi_crit(const size_t point_index, const std::vector<size_t> &neighboring_points, const std::vector<EpsilonGroup> &epsilon_groups,
                                     const Clusters &clusters, std::vector<size_t> &min_points_area) const {
         const size_t dimensions = m_data.m_chunk[1];
         const T *point = static_cast<T *>(m_data.m_p) + point_index * dimensions;
@@ -789,7 +789,7 @@ public:
             const T *other_point = static_cast<T *>(m_data.m_p) + neighbor * dimensions;
 
             std::vector<float> offsets;
-            for (auto &&eps_conf: all_eps) {
+            for (auto &&eps_conf: epsilon_groups) {
                 double offset = 0.0;
                 // determine euclidean distance to other point
                 for (auto &&d: eps_conf.dimensions) {
@@ -801,8 +801,8 @@ public:
 
             // .. if in range, add it to the vector with in range points
             bool in_range = true;
-            for (size_t i = 0; i < all_eps.size(); ++i) {
-                if (offsets[i] > all_eps[i].epsilon * all_eps[i].epsilon) {
+            for (size_t i = 0; i < epsilon_groups.size(); ++i) {
+                if (offsets[i] > epsilon_groups[i].epsilon * epsilon_groups[i].epsilon) {
                     in_range = false;
                     break;
                 }
